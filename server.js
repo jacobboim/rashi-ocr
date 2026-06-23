@@ -135,6 +135,8 @@ app.post("/ocr", upload.single("pdf"), async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable Nginx proxy buffering for SSE
+  res.flushHeaders(); // send headers immediately so the stream starts
 
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
