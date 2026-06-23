@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rashi OCR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&family=David+Libre:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --parchment:   #F2EBD9;
+      --cream:       #FAF6EF;
+      --ink:         #1A1A18;
+      --sepia:       #8C7B5E;
+      --sepia-light: #C4B49A;
+      --red:         #9B2335;
+      --red-muted:   #C4556640;
+      --border:      #DDD4C2;
+      --shadow:      rgba(26,26,24,0.08);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--parchment);
+      color: var(--ink);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      height: 52px;
+      background: var(--ink);
+      border-bottom: 2px solid var(--red);
+      flex-shrink: 0;
+    }
+    .logo {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 17px;
+      color: var(--parchment);
+      letter-spacing: 0.02em;
+    }
+    .logo span {
+      color: var(--red);
+      font-style: italic;
+    }
+    .logo-heb {
+      font-family: 'David Libre', serif;
+      font-size: 15px;
+      color: var(--sepia-light);
+      margin-left: 10px;
+      letter-spacing: 0.05em;
+    }
+    .lang-select {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--sepia-light);
+      font-size: 12px;
+    }
+    .lang-select select {
+      background: #2a2a28;
+      color: var(--parchment);
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+    }
+
+    /* ── LAYOUT ── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 52px);
+    }
+
+    /* ── DROP ZONE ── */
+    #dropzone {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+      border: 2px dashed var(--sepia-light);
+      margin: 32px;
+      border-radius: 6px;
+    }
+    #dropzone.hidden { display: none; }
+    #dropzone:hover, #dropzone.drag-over {
+      background: var(--cream);
+      border-color: var(--sepia);
+    }
+    .drop-icon {
+      width: 64px;
+      height: 64px;
+      opacity: 0.35;
+    }
+    .drop-title {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 22px;
+      color: var(--sepia);
+    }
+    .drop-sub {
+      font-size: 13px;
+      color: var(--sepia-light);
+    }
+    .drop-btn {
+      padding: 9px 22px;
+      background: var(--ink);
+      color: var(--parchment);
+      border: none;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .drop-btn:hover { background: var(--red); }
+    #file-input { display: none; }
+
+    /* ── PROGRESS ── */
+    #progress-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px;
+    }
+    #progress-view.hidden { display: none; }
+    .progress-label {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 20px;
+      color: var(--sepia);
+    }
+    .progress-status {
+      font-size: 13px;
+      color: var(--sepia-light);
+      min-height: 20px;
+      text-align: center;
+    }
+    .progress-bar-wrap {
+      width: 460px;
+      max-width: 90vw;
+    }
+    .progress-bar-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--sepia-light);
+      margin-bottom: 6px;
+    }
+    .progress-pct {
+      font-weight: 600;
+      color: var(--sepia);
+    }
+    .progress-bar-track {
+      width: 100%;
+      height: 10px;
+      background: var(--border);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--red) 0%, #c0392b 100%);
+      border-radius: 5px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+    .progress-meta {
+      display: flex;
+      gap: 28px;
+      font-size: 12px;
+      color: var(--sepia-light);
+      margin-top: 4px;
+    }
+    .progress-meta span strong {
+      color: var(--sepia);
+      font-weight: 600;
+    }
+    .progress-log {
+      width: 460px;
+      max-width: 90vw;
+      background: var(--ink);
+      border-radius: 5px;
+      padding: 10px 14px;
+      max-height: 140px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #aaa;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .progress-log .log-line { white-space: pre-wrap; }
+    .progress-log .log-line.ok  { color: #7ec87e; }
+    .progress-log .log-line.err { color: #e06c75; }
+    .progress-log .log-line.dim { color: #666; }
+
+    /* ── MAIN SPLIT VIEW ── */
+    #main-view {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    #main-view.hidden { display: none; }
+
+    /* ── PDF PANEL ── */
+    .pdf-panel {
+      width: 50%;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      background: #3a3a38;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--ink);
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    .panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sepia-light);
+    }
+    .panel-filename {
+      font-size: 11px;
+      color: #666;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pdf-viewport {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      gap: 16px;
+    }
+    .pdf-page-wrapper {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      margin-bottom: 8px;
+    }
+    .pdf-page-wrapper canvas {
+      display: block;
+      max-width: 100%;
+    }
+    .page-badge {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sepia-light);
+      text-align: center;
+      padding: 6px 0 8px;
+    }
+
+    /* ── TEXT PANEL ── */
+    .text-panel {
+      width: 50%;
+      display: flex;
+      flex-direction: column;
+      background: var(--cream);
+    }
+    .text-panel .panel-header {
+      background: var(--parchment);
+      border-bottom: 1px solid var(--border);
+    }
+    .text-panel .panel-title { color: var(--sepia); }
+    .text-toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .toolbar-btn {
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-size: 11px;
+      color: var(--sepia);
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+    }
+    .toolbar-btn:hover {
+      background: var(--ink);
+      color: var(--parchment);
+      border-color: var(--ink);
+    }
+    .text-viewport {
+      flex: 1;
+      overflow: auto;
+      padding: 24px 28px;
+    }
+    .text-page-block {
+      margin-bottom: 40px;
+    }
+    .text-page-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--sepia-light);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .text-page-content {
+      font-family: 'David Libre', serif;
+      font-size: 18px;
+      line-height: 2;
+      color: var(--ink);
+      direction: rtl;
+      text-align: right;
+      white-space: pre-wrap;
+      word-break: break-word;
+      /* RTL reveal animation */
+      overflow: hidden;
+    }
+    .text-page-content.animate {
+      animation: reveal-rtl 0.6s ease forwards;
+    }
+    @keyframes reveal-rtl {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .text-page-content[contenteditable="true"]:hover {
+      background: rgba(155,35,53,0.04);
+      border-radius: 4px;
+      outline: none;
+    }
+    .text-page-content[contenteditable="true"]:focus {
+      background: rgba(155,35,53,0.06);
+      border-radius: 4px;
+      outline: none;
+    }
+    .text-page-content.pending {
+      color: var(--sepia-light);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      direction: ltr;
+      text-align: left;
+      font-style: italic;
+    }
+    .text-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      color: var(--sepia-light);
+    }
+    .text-empty-title {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 16px;
+    }
+    .text-empty-sub { font-size: 12px; }
+
+    /* ── NEW FILE BUTTON ── */
+    .new-file-btn {
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid #444;
+      border-radius: 3px;
+      font-size: 11px;
+      color: var(--sepia-light);
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+    }
+    .new-file-btn:hover { border-color: var(--red); color: var(--red); }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--ink);
+      color: var(--parchment);
+      padding: 10px 20px;
+      border-radius: 5px;
+      font-size: 13px;
+      border-left: 3px solid var(--red);
+      transition: transform 0.3s ease;
+      z-index: 100;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--sepia-light); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    Rashi <span>OCR</span>
+    <span class="logo-heb">כתב רש״י</span>
+  </div>
+  <div class="lang-select">
+    <span>Script model:</span>
+    <select id="lang-select">
+      <option value="heb_rashi">Rashi Script (heb_rashi)</option>
+      <option value="heb">Square Hebrew (heb)</option>
+      <option value="heb+heb_rashi">Mixed (heb + heb_rashi)</option>
+    </select>
+  </div>
+  <div class="lang-select">
+    <span>OCR Engine:</span>
+    <select id="engine-select">
+      <option value="tesseract">Tesseract</option>
+      <option value="claude">Claude Vision</option>
+    </select>
+  </div>
+  <div class="lang-select" id="preprocess-wrapper">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" id="preprocess-toggle" checked style="accent-color:var(--red);width:14px;height:14px;" />
+      <span>Preprocess image</span>
+    </label>
+  </div>
+  <div class="lang-select" id="columns-wrapper">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" id="columns-toggle" style="accent-color:var(--red);width:14px;height:14px;" />
+      <span>2 columns</span>
+    </label>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- DROP ZONE -->
+  <div id="dropzone">
+    <svg class="drop-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="12" width="38" height="46" rx="3" stroke="#8C7B5E" stroke-width="2.5"/>
+      <path d="M20 12V8a2 2 0 012-2h22l8 8v36a2 2 0 01-2 2h-6" stroke="#8C7B5E" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M42 6v8h8" stroke="#8C7B5E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M27 38v-14M21 30l6-6 6 6" stroke="#9B2335" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="drop-title">Drop a PDF here</div>
+    <div class="drop-sub">Scanned Rashi-script pages, Gemara, responsa, machzor…</div>
+    <button class="drop-btn" id="browse-btn">Browse file</button>
+    <input type="file" id="file-input" accept=".pdf" />
+  </div>
+
+  <!-- PROGRESS -->
+  <div id="progress-view" class="hidden">
+    <div class="progress-label">Extracting text…</div>
+    <div class="progress-status" id="progress-status">Starting…</div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-header">
+        <span id="progress-pages">Waiting for server…</span>
+        <span class="progress-pct" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+    </div>
+
+    <div class="progress-meta">
+      <span>Pages: <strong id="meta-pages">—</strong></span>
+      <span>Elapsed: <strong id="meta-elapsed">0s</strong></span>
+      <span>Avg/page: <strong id="meta-avg">—</strong></span>
+    </div>
+
+    <div class="progress-log" id="progress-log"></div>
+  </div>
+
+  <!-- MAIN SPLIT VIEW -->
+  <div id="main-view" class="hidden">
+
+    <div class="pdf-panel">
+      <div class="panel-header">
+        <span class="panel-title">Original</span>
+        <span class="panel-filename" id="pdf-filename"></span>
+        <button class="new-file-btn" id="new-file-btn">New file</button>
+      </div>
+      <div class="pdf-viewport" id="pdf-viewport"></div>
+    </div>
+
+    <div class="text-panel">
+      <div class="panel-header">
+        <span class="panel-title">Extracted Text</span>
+        <div class="text-toolbar">
+          <button class="toolbar-btn" id="copy-btn">Copy all</button>
+          <button class="toolbar-btn" id="download-btn">Download .txt</button>
+        </div>
+      </div>
+      <div class="text-viewport" id="text-viewport">
+        <div class="text-empty" id="text-empty">
+          <div class="text-empty-title">Awaiting OCR…</div>
+          <div class="text-empty-sub">Text will appear here as each page is processed</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const SERVER = window.location.origin;
+
+  const dropzone     = document.getElementById('dropzone');
+  const progressView = document.getElementById('progress-view');
+  const mainView     = document.getElementById('main-view');
+  const fileInput    = document.getElementById('file-input');
+  const pdfViewport  = document.getElementById('pdf-viewport');
+  const textViewport = document.getElementById('text-viewport');
+  const textEmpty    = document.getElementById('text-empty');
+  const progressBar    = document.getElementById('progress-bar');
+  const progressStatus = document.getElementById('progress-status');
+  const progressPages  = document.getElementById('progress-pages');
+  const progressPct    = document.getElementById('progress-pct');
+  const metaPages      = document.getElementById('meta-pages');
+  const metaElapsed    = document.getElementById('meta-elapsed');
+  const metaAvg        = document.getElementById('meta-avg');
+  const progressLog    = document.getElementById('progress-log');
+  const pdfFilename    = document.getElementById('pdf-filename');
+  const langSelect     = document.getElementById('lang-select');
+  const engineSelect   = document.getElementById('engine-select');
+  const preprocessWrap = document.getElementById('preprocess-wrapper');
+
+  engineSelect.addEventListener('change', () => {
+    preprocessWrap.style.display = engineSelect.value === 'claude' ? 'none' : '';
+  });
+
+  let currentFile = null;
+  let allPages = [];
+  let jobStartTime = 0;
+  let elapsedTimer = null;
+
+  function addLog(msg, cls = '') {
+    const line = document.createElement('div');
+    line.className = 'log-line' + (cls ? ' ' + cls : '');
+    const ts = new Date().toLocaleTimeString('en-GB', { hour12: false });
+    line.textContent = `[${ts}] ${msg}`;
+    progressLog.appendChild(line);
+    progressLog.scrollTop = progressLog.scrollHeight;
+  }
+
+  function startElapsedTimer() {
+    jobStartTime = Date.now();
+    clearInterval(elapsedTimer);
+    elapsedTimer = setInterval(() => {
+      const s = ((Date.now() - jobStartTime) / 1000).toFixed(0);
+      metaElapsed.textContent = s + 's';
+    }, 500);
+  }
+
+  function stopElapsedTimer() {
+    clearInterval(elapsedTimer);
+  }
+
+  // ── Drag and drop ──
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file?.type === 'application/pdf') handleFile(file);
+    else showToast('Please drop a PDF file');
+  });
+  document.getElementById('browse-btn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+  document.getElementById('new-file-btn').addEventListener('click', reset);
+  document.getElementById('copy-btn').addEventListener('click', copyAll);
+  document.getElementById('download-btn').addEventListener('click', downloadTxt);
+
+  function reset() {
+    currentFile = null; allPages = [];
+    pdfViewport.innerHTML = '';
+    textViewport.innerHTML = '';
+    textViewport.appendChild(textEmpty);
+    textEmpty.style.display = 'flex';
+    fileInput.value = '';
+    show('dropzone');
+  }
+
+  function show(which) {
+    dropzone.classList.toggle('hidden', which !== 'dropzone');
+    progressView.classList.toggle('hidden', which !== 'progress');
+    mainView.classList.toggle('hidden', which !== 'main');
+  }
+
+  async function handleFile(file) {
+    currentFile = file;
+    pdfFilename.textContent = file.name;
+    allPages = [];
+
+    show('progress');
+    progressBar.style.width = '0%';
+    progressPct.textContent = '0%';
+    progressStatus.textContent = 'Uploading PDF to server…';
+    progressPages.textContent = 'Waiting for server…';
+    metaPages.textContent = '—';
+    metaElapsed.textContent = '0s';
+    metaAvg.textContent = '—';
+    progressLog.innerHTML = '';
+    addLog('Uploading PDF…');
+    startElapsedTimer();
+
+    // Render PDF pages in the left panel
+    renderPDF(file);
+
+    // Send to OCR server
+    const formData = new FormData();
+    formData.append('pdf', file);
+    formData.append('lang', langSelect.value);
+    const engine = document.getElementById('engine-select').value;
+    formData.append('engine', engine);
+    formData.append('preprocess', document.getElementById('preprocess-toggle').checked ? '1' : '0');
+    formData.append('columns', document.getElementById('columns-toggle').checked ? '2' : '1');
+
+    try {
+      const response = await fetch(`${SERVER}/ocr`, { method: 'POST', body: formData });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try { handleSSE(JSON.parse(line.slice(6))); } catch {}
+          }
+        }
+      }
+    } catch (err) {
+      stopElapsedTimer();
+      addLog('✖ Connection failed: ' + err.message, 'err');
+      showToast('Could not reach OCR server. Is it running on port 3333?');
+      show('dropzone');
+    }
+  }
+
+  let totalPages = 0;
+  function handleSSE(msg) {
+    if (msg.type === 'total') {
+      totalPages = msg.total;
+      progressPages.textContent = `0 / ${totalPages} pages`;
+      metaPages.textContent = `0 / ${totalPages}`;
+      addLog(`PDF converted — ${totalPages} page(s) to process`, 'ok');
+      textEmpty.style.display = 'none';
+      textViewport.innerHTML = '';
+      for (let i = 1; i <= totalPages; i++) {
+        const block = document.createElement('div');
+        block.className = 'text-page-block';
+        block.id = `text-page-${i}`;
+        block.innerHTML = `
+          <div class="text-page-label">Page ${i}</div>
+          <div class="text-page-content pending" id="text-content-${i}" contenteditable="false" spellcheck="false">Processing…</div>
+        `;
+        textViewport.appendChild(block);
+      }
+      show('main');
+    } else if (msg.type === 'status') {
+      progressStatus.textContent = msg.message;
+      addLog(msg.message);
+    } else if (msg.type === 'page') {
+      const pct = Math.round((msg.page / totalPages) * 100);
+      progressBar.style.width = pct + '%';
+      progressPct.textContent = pct + '%';
+      progressPages.textContent = `${msg.page} / ${totalPages} pages`;
+      metaPages.textContent = `${msg.page} / ${totalPages}`;
+      progressStatus.textContent = `Processed page ${msg.page} of ${totalPages}`;
+
+      // Update avg/page
+      if (msg.elapsedMs && msg.page > 0) {
+        const avg = (msg.elapsedMs / msg.page / 1000).toFixed(1);
+        metaAvg.textContent = avg + 's';
+      }
+
+      const chars = (msg.text || '').length;
+      addLog(`✓ Page ${msg.page}/${totalPages} — ${chars} chars extracted`, 'ok');
+
+      allPages[msg.page - 1] = msg.text;
+      const el = document.getElementById(`text-content-${msg.page}`);
+      if (el) {
+        el.classList.remove('pending');
+        el.classList.add('animate');
+        el.textContent = msg.text || '(no text detected)';
+        el.contentEditable = 'true';
+        el.addEventListener('input', () => { allPages[msg.page - 1] = el.innerText; });
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    } else if (msg.type === 'done') {
+      stopElapsedTimer();
+      const elapsed = ((Date.now() - jobStartTime) / 1000).toFixed(1);
+      addLog(`✔ Done — ${totalPages} page(s) in ${elapsed}s`, 'ok');
+      showToast(`Done — ${totalPages} page${totalPages !== 1 ? 's' : ''} extracted`);
+    } else if (msg.type === 'error') {
+      stopElapsedTimer();
+      addLog('✖ Error: ' + msg.message, 'err');
+      showToast('OCR error: ' + msg.message);
+    }
+  }
+
+  async function renderPDF(file) {
+    pdfViewport.innerHTML = '';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.4 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'pdf-page-wrapper';
+      const badge = document.createElement('div');
+      badge.className = 'page-badge';
+      badge.textContent = `Page ${i}`;
+      wrapper.appendChild(badge);
+      wrapper.appendChild(canvas);
+      pdfViewport.appendChild(wrapper);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    }
+  }
+
+  function copyAll() {
+    const text = allPages.join('\n\n--- Page Break ---\n\n');
+    navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+  }
+
+  function downloadTxt() {
+    const text = allPages.join('\n\n--- Page Break ---\n\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (currentFile?.name || 'output').replace('.pdf', '') + '_rashi_ocr.txt';
+    a.click();
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+</script>
+</body>
+</html>
