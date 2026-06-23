@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const tesseract = require("node-tesseract-ocr");
 const poppler = require("pdf-poppler");
-const sharp = require("sharp");
+const Jimp = require("jimp");
 const cors = require("cors");
 const fs = require("fs/promises");
 const path = require("path");
@@ -28,12 +28,18 @@ function elapsed(startMs) {
 
 async function preprocessImage(imagePath) {
   const outPath = imagePath.replace(".png", "_processed.png");
-  await sharp(imagePath)
+  const image = await Jimp.read(imagePath);
+  image
     .greyscale()
     .normalize()
-    .sharpen()
-    .threshold(150)
-    .toFile(outPath);
+    .convolute([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]);
+  image.scan(0, 0, image.bitmap.width, image.bitmap.height, (x, y, idx) => {
+    const val = image.bitmap.data[idx] < 150 ? 0 : 255;
+    image.bitmap.data[idx] = val;
+    image.bitmap.data[idx + 1] = val;
+    image.bitmap.data[idx + 2] = val;
+  });
+  await image.writeAsync(outPath);
   return outPath;
 }
 
@@ -65,14 +71,15 @@ async function ocrImage(imagePath, lang) {
 }
 
 async function ocrImageTwoColumn(imagePath, lang) {
-  const meta = await sharp(imagePath).metadata();
-  const halfW = Math.floor(meta.width / 2);
+  const image = await Jimp.read(imagePath);
+  const { width, height } = image.bitmap;
+  const halfW = Math.floor(width / 2);
 
   const leftPath = imagePath.replace(".png", "_left.png");
   const rightPath = imagePath.replace(".png", "_right.png");
 
-  await sharp(imagePath).extract({ left: 0, top: 0, width: halfW, height: meta.height }).toFile(rightPath);
-  await sharp(imagePath).extract({ left: halfW, top: 0, width: meta.width - halfW, height: meta.height }).toFile(leftPath);
+  await image.clone().crop(0, 0, halfW, height).writeAsync(rightPath);
+  await image.clone().crop(halfW, 0, width - halfW, height).writeAsync(leftPath);
 
   const config = { lang, oem: 1, psm: 6 };
   const [rightText, leftText] = await Promise.all([
