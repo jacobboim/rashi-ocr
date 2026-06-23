@@ -1,7 +1,6 @@
 const express = require("express");
 const multer = require("multer");
 const tesseract = require("node-tesseract-ocr");
-const poppler = require("pdf-poppler");
 const Jimp = require("jimp");
 const cors = require("cors");
 const fs = require("fs/promises");
