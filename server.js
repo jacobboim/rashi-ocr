@@ -1,13 +1,11 @@
 const express = require("express");
 const multer = require("multer");
 const tesseract = require("node-tesseract-ocr");
-const poppler = require("pdf-poppler");
-const sharp = require("sharp");
+const Jimp = require("jimp");
 const cors = require("cors");
 const fs = require("fs/promises");
 const path = require("path");
 const os = require("os");
-const Anthropic = require("@anthropic-ai/sdk").default;
 
 const app = express();
 app.use(cors());
@@ -28,12 +26,8 @@ function elapsed(startMs) {
 
 async function preprocessImage(imagePath) {
   const outPath = imagePath.replace(".png", "_processed.png");
-  await sharp(imagePath)
-    .greyscale()
-    .normalize()
-    .sharpen()
-    .threshold(150)
-    .toFile(outPath);
+  const image = await Jimp.read(imagePath);
+  await image.greyscale().normalize().writeAsync(outPath);
   return outPath;
 }
 
@@ -65,14 +59,16 @@ async function ocrImage(imagePath, lang) {
 }
 
 async function ocrImageTwoColumn(imagePath, lang) {
-  const meta = await sharp(imagePath).metadata();
-  const halfW = Math.floor(meta.width / 2);
+  const image = await Jimp.read(imagePath);
+  const w = image.bitmap.width;
+  const h = image.bitmap.height;
+  const halfW = Math.floor(w / 2);
 
   const leftPath = imagePath.replace(".png", "_left.png");
   const rightPath = imagePath.replace(".png", "_right.png");
 
-  await sharp(imagePath).extract({ left: 0, top: 0, width: halfW, height: meta.height }).toFile(rightPath);
-  await sharp(imagePath).extract({ left: halfW, top: 0, width: meta.width - halfW, height: meta.height }).toFile(leftPath);
+  await image.clone().crop(0, 0, halfW, h).writeAsync(rightPath);
+  await image.clone().crop(halfW, 0, w - halfW, h).writeAsync(leftPath);
 
   const config = { lang, oem: 1, psm: 6 };
   const [rightText, leftText] = await Promise.all([
@@ -83,41 +79,12 @@ async function ocrImageTwoColumn(imagePath, lang) {
   return leftText.trim() + "\n\n" + rightText.trim();
 }
 
-async function ocrImageClaude(imagePath) {
-  const client = new Anthropic();
-  const imageData = await fs.readFile(imagePath);
-  const base64 = imageData.toString("base64");
-
-  const response = await client.messages.create({
-    model: "claude-opus-4-8",
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image",
-            source: { type: "base64", media_type: "image/png", data: base64 },
-          },
-          {
-            type: "text",
-            text: 'This image contains Hebrew text written in Rashi script (כתב רש"י), a semi-cursive Hebrew script used in traditional Jewish texts. Please transcribe ALL the Hebrew text you see in this image exactly as written, preserving line breaks. Output only the transcribed text with no commentary or explanation.',
-          },
-        ],
-      },
-    ],
-  });
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  return textBlock ? textBlock.text : "";
-}
-
 // Stream OCR progress via SSE
 app.post("/ocr", upload.single("pdf"), async (req, res) => {
   const lang = req.body.lang || "heb_rashi";
   const engine = req.body.engine || "tesseract";
   const columns = parseInt(req.body.columns || "1", 10);
-  const preprocess = engine === "tesseract" && req.body.preprocess !== "0";
+  const preprocess = req.body.preprocess !== "0";
   const jobStart = Date.now();
   const fileSizeKB = req.file ? (req.file.size / 1024).toFixed(1) : "?";
 
@@ -146,28 +113,21 @@ app.post("/ocr", upload.single("pdf"), async (req, res) => {
 
     async function processPage(imagePath, pageNum) {
       const pageStart = Date.now();
-      let text;
-      if (engine === "claude") {
-        log(`  Page ${pageNum}/${images.length}: sending to Claude Vision...`);
-        send({ type: "status", message: `Claude Vision on page ${pageNum}…` });
-        text = await ocrImageClaude(imagePath);
+      let processed = imagePath;
+      if (preprocess) {
+        log(`  Page ${pageNum}/${images.length}: preprocessing...`);
+        send({ type: "status", message: `Preprocessing page ${pageNum}…` });
+        processed = await preprocessImage(imagePath);
       } else {
-        let processed = imagePath;
-        if (preprocess) {
-          log(`  Page ${pageNum}/${images.length}: preprocessing...`);
-          send({ type: "status", message: `Preprocessing page ${pageNum}…` });
-          processed = await preprocessImage(imagePath);
-        } else {
-          log(`  Page ${pageNum}/${images.length}: skipping preprocessing`);
-          send({ type: "status", message: `OCR on page ${pageNum}…` });
-        }
-        log(
-          `  Page ${pageNum}/${images.length}: running OCR (lang=${lang}, columns=${columns})...`,
-        );
-        text = columns === 2
-          ? await ocrImageTwoColumn(processed, lang)
-          : await ocrImage(processed, lang);
+        log(`  Page ${pageNum}/${images.length}: skipping preprocessing`);
+        send({ type: "status", message: `OCR on page ${pageNum}…` });
       }
+      log(
+        `  Page ${pageNum}/${images.length}: running OCR (lang=${lang}, columns=${columns})...`,
+      );
+      const text = columns === 2
+        ? await ocrImageTwoColumn(processed, lang)
+        : await ocrImage(processed, lang);
       const chars = text.trim().length;
       completed++;
       log(

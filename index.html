@@ -431,14 +431,7 @@
     <select id="lang-select">
       <option value="heb_rashi">Rashi Script (heb_rashi)</option>
       <option value="heb">Square Hebrew (heb)</option>
-      <option value="heb+heb_rashi">Mixed (heb + heb_rashi)</option>
-    </select>
-  </div>
-  <div class="lang-select">
-    <span>OCR Engine:</span>
-    <select id="engine-select">
-      <option value="tesseract">Tesseract</option>
-      <option value="claude">Claude Vision</option>
+      <option value="heb+heb_rashi" selected>Mixed (heb + heb_rashi)</option>
     </select>
   </div>
   <div class="lang-select" id="preprocess-wrapper">
@@ -449,7 +442,7 @@
   </div>
   <div class="lang-select" id="columns-wrapper">
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-      <input type="checkbox" id="columns-toggle" style="accent-color:var(--red);width:14px;height:14px;" />
+      <input type="checkbox" id="columns-toggle" checked style="accent-color:var(--red);width:14px;height:14px;" />
       <span>2 columns</span>
     </label>
   </div>
@@ -553,12 +546,6 @@
   const progressLog    = document.getElementById('progress-log');
   const pdfFilename    = document.getElementById('pdf-filename');
   const langSelect     = document.getElementById('lang-select');
-  const engineSelect   = document.getElementById('engine-select');
-  const preprocessWrap = document.getElementById('preprocess-wrapper');
-
-  engineSelect.addEventListener('change', () => {
-    preprocessWrap.style.display = engineSelect.value === 'claude' ? 'none' : '';
-  });
 
   let currentFile = null;
   let allPages = [];
@@ -644,8 +631,6 @@
     const formData = new FormData();
     formData.append('pdf', file);
     formData.append('lang', langSelect.value);
-    const engine = document.getElementById('engine-select').value;
-    formData.append('engine', engine);
     formData.append('preprocess', document.getElementById('preprocess-toggle').checked ? '1' : '0');
     formData.append('columns', document.getElementById('columns-toggle').checked ? '2' : '1');
 
